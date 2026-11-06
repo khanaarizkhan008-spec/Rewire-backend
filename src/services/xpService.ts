@@ -24,7 +24,6 @@ export class XPService {
           spendableXP: 0,
           currentStreak: 0,
           longestStreak: 0,
-          multiplier: 1.0,
           recoveryTokens: 1
         }
       });
@@ -75,7 +74,6 @@ export class XPService {
           spendableXP: 0,
           currentStreak: 0,
           longestStreak: 0,
-          multiplier: 1.0,
           recoveryTokens: 1
         }
       });
