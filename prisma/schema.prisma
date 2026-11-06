@@ -1,0 +1,218 @@
+// REWIRE - Prisma Database Schema
+// Designed for PostgreSQL with comprehensive user-specific progress,
+// mission tracking, journal reflections, XP ledger, and AI conversations.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(uuid())
+  fullName     String
+  email        String        @unique
+  passwordHash String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  progress            UserProgress?
+  settings            UserSettings?
+  refreshTokens       RefreshToken[]
+  missionCompletions  MissionCompletion[]
+  customMissions      Mission[]             @relation("UserCustomMissions")
+  goals               Goal[]
+  journalEntries      JournalEntry[]
+  xpTransactions      XPTransaction[]
+  deepWorkSessions    DeepWorkSession[]
+  aiConversations     AIConversation[]
+
+  @@index([email])
+}
+
+model UserSettings {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pinCode        String   @default("1234")
+  pinLockEnabled Boolean  @default(false)
+  shieldEnabled  Boolean  @default(false)
+  shareWithAI    Boolean  @default(false) // Strict privacy opt-in for AI Coach
+  activeTheme    String   @default("default")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model UserProgress {
+  id                     String   @id @default(uuid())
+  userId                 String   @unique
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentLevel           Int      @default(1)
+  currentDay             Int      @default(1)
+  lifetimeXP             Int      @default(0)
+  spendableXP            Int      @default(0)
+  currentStreak          Int      @default(0)
+  longestStreak          Int      @default(0)
+  totalCompletedMissions Int      @default(0)
+  recoveryTokens         Int      @default(1)
+  inRecoveryMode         Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([token])
+}
+
+model Mission {
+  id                    String              @id @default(uuid())
+  title                 String
+  description           String
+  category              String              // Physical, Mental, Productivity, Digital Discipline, Personal Growth
+  difficulty            String              // Starter, Intermediate, High Intensity
+  xpReward              Int                 @default(100)
+  levelNumber           Int                 @default(1)
+  dayNumber             Int                 @default(1)
+  isCore                Boolean             @default(true)
+  requiresSelfie        Boolean             @default(false)
+  targetDurationMinutes Int?
+  targetTime            String?
+  createdById           String?
+  createdBy             User?               @relation("UserCustomMissions", fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  completions           MissionCompletion[]
+
+  @@index([levelNumber])
+  @@index([createdById])
+}
+
+model MissionCompletion {
+  id                     String   @id @default(uuid())
+  userId                 String
+  missionId              String
+  user                   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mission                Mission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  completedAt            DateTime @default(now())
+  xpAwarded              Int
+  checkInImageReference  String?  // IndexedDB image reference or client hash
+  dateString             String   // YYYY-MM-DD for fast streak / day queries
+
+  @@unique([userId, missionId, dateString])
+  @@index([userId, dateString])
+}
+
+model Goal {
+  id          String          @id @default(uuid())
+  userId      String
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  category    String          // Fitness, Career, Discipline, Mindset, Digital
+  deadline    DateTime?
+  progress    Int             @default(0)
+  status      String          @default("ACTIVE") // ACTIVE, COMPLETED, PAUSED
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  milestones  GoalMilestone[]
+
+  @@index([userId])
+}
+
+model GoalMilestone {
+  id        String   @id @default(uuid())
+  goalId    String
+  goal      Goal     @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  title     String
+  completed Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([goalId])
+}
+
+model JournalEntry {
+  id                 String   @id @default(uuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date               String   // YYYY-MM-DD
+  mood               String   // Amazing, Good, Normal, Low, Difficult
+  reflection         String   // How was your day?
+  bestMoment         String?
+  biggestDistraction String?
+  whatDidYouLearn    String?
+  improveTomorrow    String?
+  tomorrowPriority   String?
+  activitySummary    String?  // JSON stringified summary of missions and focus
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([userId])
+}
+
+model XPTransaction {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount          Int
+  transactionType String   // earned, spent
+  category        String   // mission, journal, deep_work, boss_challenge, store_purchase, streak_restore, level_clear
+  description     String
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model DeepWorkSession {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  durationMinutes Int
+  rating          Int      // 1 to 5
+  taskName        String
+  notes           String?
+  xpAwarded       Int
+  completedAt     DateTime @default(now())
+
+  @@index([userId])
+}
+
+model AIConversation {
+  id        String      @id @default(uuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String      @default("New Strategy Session")
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  messages  AIMessage[]
+
+  @@index([userId])
+}
+
+model AIMessage {
+  id             String         @id @default(uuid())
+  conversationId String
+  conversation   AIConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String         // user, assistant, system
+  content        String
+  createdAt      DateTime       @default(now())
+
+  @@index([conversationId])
+}
+
